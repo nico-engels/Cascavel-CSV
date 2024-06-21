@@ -1,0 +1,19 @@
+---------------------------------------------------------------------------------------------------------
+03/06/2020 - Nicolas Daniel Engels
+  v0.5  => 03/06/2020
+  v0.75 => 23/03/2021 * Ajustes CSV mal formados, adicionado parâmetro "-f"
+  v0.8  => 27/05/2024 * Usar Sqlite como banco, restruturação completa
+
+Cascavel CSV: Utilitário para processamento de dados em arquivos tabulares CSV. Tratando o CSV como uma
+              fonte de dados relacional. Permitindo manipular, analisar e transformar os arquivos CSV
+              usando a linguagem SQL.
+
+Dependências:
+  C++23
+  cmake
+
+Para compilar, na pasta build:
+  cmake ..
+  make .
+
+🐍
