@@ -4,12 +4,12 @@ Utilitário para processamento de dados em arquivos tabulares CSV. Tratando o CS
 fonte de dados relacional. Permitindo manipular, analisar e transformar os arquivos CSV
 usando a linguagem SQL.
 
-# Tecnologias
+## Tecnologias
 
 C++ 23 mapeando o CSV em um Banco de Dados SQLite de forma temporária. Dependendo do tamanho do
 arquivo CSV o arquivo é mapeado em memória, senão usa um arquivo temporário.
 
-# Compilação
+## Compilação
 
 Na pasta ./build executar o cmake com as configurações de seu ambiente. Exemplos:
 
@@ -34,7 +34,7 @@ cmake --build .
 
 O executável cascavel_csv estará na pasta ./bin
 
-# cascavel_csv -h
+## cascavel_csv -h
 
 ```
 Cascavel CSV [arquivo_csv] [-c 'comando'] [-o arquivo_saida]
@@ -57,7 +57,7 @@ Cascavel CSV [arquivo_csv] [-c 'comando'] [-o arquivo_saida]
   -no-q             Indica que não deve colocar os itens com aspas. Por padrão segue o arquivo de entrada.
 ```
 
-## SQL
+### SQL
 
 É possível executar comandos SQL como se o CSV interpretado fosse uma tabela e cada coluna.
 
@@ -65,7 +65,7 @@ O CSV é tratado pelo nome tab_1 e cada coluna do CSV segue o formato col_0, col
 
 Ver abaixo exemplos de consultas.
 
-# Exemplos
+## Exemplos
 
 Acessando um arquivo com o estoque de uma mercearia:
 
@@ -81,7 +81,7 @@ arquivo estoque.csv
 "legumes";"cenoura";"30";"1.44"
 ```
 
-## Básico
+### Básico
 
 Por padrão o Cascavel-CSV imprime o resultado na tela. Então lendo o arquivo e não
 realizando nenhuma operação ele apenas lê o arquivo:
@@ -100,7 +100,7 @@ Saída terminal:
 "legumes";"cenoura";"30";"1.44"
 ```
 
-## Delimitador de saída
+### Delimitador de saída
 
 É possível trocar os delimitadores de saída:
 
@@ -118,7 +118,7 @@ Saída terminal:
 "legumes"	"cenoura"	"30"	"1.44"
 ```
 
-## Consulta
+### Consulta
 
 Realizar consultas SQL. Todos os itens que sejam da categoria frutas:
 
