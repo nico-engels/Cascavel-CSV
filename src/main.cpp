@@ -222,7 +222,6 @@ void bd_criar_estrutura(sqlite_api& con, ifstream& arq_ent, char delim_ent)
 
     // Processar linhas
     string sql_ins;
-    int no_linhas = 0;
     while (getline(arq_ent, linha))
     {
       ispanstream is(linha);
@@ -244,7 +243,6 @@ void bd_criar_estrutura(sqlite_api& con, ifstream& arq_ent, char delim_ent)
         bd_gravar_dados_tabela(con, "tab_1", linhas_bd);
         linhas_bd.clear();
       }
-      no_linhas++;
     }
 
     if (!linhas_bd.empty())

@@ -6,7 +6,7 @@ project(cascavel_csv VERSION 1)
 if(MSVC)
   add_compile_options(/W4 /WX)
 else()
-  add_compile_options(-Wall -Wextra -pedantic -Werror)
+  add_compile_options(-Wall -Wextra -pedantic -Werror -Wno-unqualified-std-cast-call)
 endif()
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../bin)
@@ -19,7 +19,6 @@ set(csc_csv_srcs
   include/sqlite_api.h src/sqlite_api.cpp
   include/str_util.h   src/str_util.cpp
   src/main.cpp
-  src/print.cc
 )
 
 #link_libraries("-static")
