@@ -61,7 +61,7 @@ Cascavel CSV [arquivo_csv] [-c 'comando'] [-o arquivo_saida]
 
 É possível executar comandos SQL como se o CSV interpretado fosse uma tabela e cada coluna.
 
-O CSV é tratado pelo nome tab_1 e cada coluna do CSV segue o formato col_0, col_1, ..., col_n.
+O CSV é tratado pelo nome tab_0 e cada coluna do CSV segue o formato col_0, col_1, ..., col_n.
 
 Ver abaixo exemplos de consultas.
 
@@ -122,7 +122,7 @@ Saída terminal:
 
 Realizar consultas SQL. Todos os itens que sejam da categoria frutas:
 
-`cascavel_csv estoque.csv -c "SELECT * FROM tab_1 WHERE col_0 = 'frutas'"`
+`cascavel_csv estoque.csv -c "SELECT * FROM tab_0 WHERE col_0 = 'frutas'"`
 
 Saída terminal:
 
@@ -134,7 +134,7 @@ Saída terminal:
 
 Todas as categorias
 
-`cascavel_csv estoque.csv -no-q -c "SELECT distinct col_0 FROM tab_1 ORDER BY col_0"`
+`cascavel_csv estoque.csv -no-q -c "SELECT distinct col_0 FROM tab_0 ORDER BY col_0"`
 
 Saída:
 
@@ -147,7 +147,7 @@ legumes
 
 Quantidade de itens do estoque:
 
-`cascavel_csv estoque.csv -c "SELECT count(1) as qtde FROM tab_1"`
+`cascavel_csv estoque.csv -c "SELECT count(1) as qtde FROM tab_0"`
 
 Saída:
 
@@ -158,7 +158,7 @@ Saída:
 
 Valor do estoque
 
-`cascavel_csv estoque.csv -c "SELECT printf('%.2f', sum(col_2 * col_3)) as 'Valor Estoque' FROM tab_1"`
+`cascavel_csv estoque.csv -c "SELECT printf('%.2f', sum(col_2 * col_3)) as 'Valor Estoque' FROM tab_0"`
 
 Saída:
 

@@ -8,7 +8,7 @@ void uso_exe(string_view msg /*= {}*/)
     println("Cascavel CSV [arquivo_csv] [-c 'comando'] [-o arquivo_saida]\n"
             "  arquivo_csv:      O arquivo CSV para ler os dados\n"
             "                    - Ao interpretar tenta deduzir o delimitador, caso não seja possível usa o ';'.\n"
-            "  -c \"comando\":     Processa o arquivo utilizando o comando (use --ajuda-csv-sql para detalhes.\n"
+            "  -c \"comando\":     Processa o arquivo utilizando o comando (use --ajuda-csv-sql para detalhes).\n"
             "  -d  delim:        Delimitador do arquivo de entrada. Por padrão segue o arquivo de entrada.\n"
             "  -ds delim:        Delimitador do arquivo de saída. Por padrão é o mesmo da entrada.\n"
             "                    Valores para delim:\n"
@@ -23,6 +23,7 @@ void uso_exe(string_view msg /*= {}*/)
             "  -o arquivo_saida: Arquivo para gravar o resultado do processamento.\n"
             "  -q                Indica que deve colocar os itens com aspas. Por padrão segue o arquivo de entrada.\n"
             "  -no-q             Indica que não deve colocar os itens com aspas. Por padrão segue o arquivo de entrada.\n"
+            "  -ig               Ignorar erros básicos de leiaute, linhas com problema.\n"
             "\n"
             "{}", msg);
     exit(1);
@@ -90,6 +91,8 @@ map<string, string> interpretar_args(span<const char*> args)
         ret["-q"] = "sim";
       else if (arg == "-no-q")
         ret["-no-q"] = "sim";
+      else if (arg == "-ig")
+        ret["-ig"] = "sim";
       else
         uso_exe("Parâmetro '" + arg + "' não reconhecido ou necessita de parâmetro.");
     }

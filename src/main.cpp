@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <iostream>
 #include <fstream>
@@ -20,19 +21,22 @@ using namespace std::chrono;
 using namespace nes;
 using namespace nes::bd;
 namespace fs = std::filesystem;
+namespace rng = std::ranges;
 namespace vw = std::views;
 
 struct cmd_cfg_t
 {
-    optional<char> delim_ent;
-    optional<char> delim_saida;
-    optional<bool> delim_fim_linha;
-    optional<bool> must_quoted;
+    char delim_ent;
+    char delim_saida;
+    bool delim_fim_linha;
+    bool must_quoted;
     optional<string> sql_out;
+    bool ignorar_erros;
 };
 
 cmd_cfg_t extrair_cfg(const map<string, string>&, ifstream&);
 void bd_criar_estrutura(sqlite_api&, ifstream&, char);
+void bd_processa_dados(sqlite_api&, ifstream&, char, bool);
 void bd_gravar_dados_tabela(sqlite_api&, string_view, const vector<string>&);
 void gerar_saida(sqlite_api&, ostream&, char, bool, bool, string_view);
 
@@ -63,7 +67,7 @@ try {
     else
       arq_saida = &cout;
 
-    const auto [delim_ent, delim_saida, delim_fim_linha, must_quoted, sql_out] = extrair_cfg(args, arq_ent);
+    const auto [delim_ent, delim_saida, delim_fim_linha, must_quoted, sql_out, ign_err] = extrair_cfg(args, arq_ent);
 
     // Criar o bd temporário para as manipulações
     sqlite_api con;
@@ -73,9 +77,18 @@ try {
     //con.conectar("..\\examples\\test.bd");
     con.conectar("");
 
-    bd_criar_estrutura(con, arq_ent, *delim_ent);
+    // Processamento
+    // 1º - Estrutura
+    bd_criar_estrutura(con, arq_ent, delim_ent);
 
-    gerar_saida(con, *arq_saida, *delim_saida, *delim_fim_linha, *must_quoted, sql_out.value_or("SELECT * FROM tab_1 t1"));
+    // 2º - Verifica se a consulta funciona
+    (void)con.exec_sql(sql_out.value_or("SELECT * FROM tab_0 t1")).value();
+
+    // 3º - Dados
+    bd_processa_dados(con, arq_ent, delim_ent, ign_err);
+
+    // 4º - Gerar Saída
+    gerar_saida(con, *arq_saida, delim_saida, delim_fim_linha, must_quoted, sql_out.value_or("SELECT * FROM tab_0 t1"));
 
 
 } catch (const exception& e) {
@@ -179,7 +192,9 @@ cmd_cfg_t extrair_cfg(const map<string, string>& args, ifstream& arq_ent)
     if (!delim_ent || !delim_saida || !delim_fim_linha || !must_quoted)
       throw runtime_exc { "Não foi possível definir os parâmetros!" };
 
-    return { delim_ent, delim_saida, delim_fim_linha, must_quoted, sql };
+    bool ign = args.contains("-ig");
+
+    return { *delim_ent, *delim_saida, *delim_fim_linha, *must_quoted, sql, ign };
 }
 
 void bd_criar_estrutura(sqlite_api& con, ifstream& arq_ent, char delim_ent)
@@ -205,9 +220,9 @@ void bd_criar_estrutura(sqlite_api& con, ifstream& arq_ent, char delim_ent)
       throw runtime_exc { "Não foi possível ler o cabeçalho!" };
 
     // Cria a tabela e metadados das colunas
-    string sql_tab = "CREATE TABLE tab_1 (";
+    string sql_tab = "CREATE TABLE tab_0 (";
     for (const auto [i, c] : cols | vw::enumerate) {
-      linhas_bd.push_back(format("('tab_1', {}, '{}')", i, c));
+      linhas_bd.push_back(format("('tab_0', {}, '{}')", i, c));
 
       if (i > 0)
         sql_tab += ", ";
@@ -216,14 +231,37 @@ void bd_criar_estrutura(sqlite_api& con, ifstream& arq_ent, char delim_ent)
     sql_tab += ")";
 
     bd_gravar_dados_tabela(con, "csv_col (TAB, ORD, NAME)", linhas_bd);
-    linhas_bd.clear();
 
     con.exec_sql(sql_tab);
+}
 
+void bd_processa_dados(sqlite_api& con, ifstream& arq_ent, char delim_ent, bool ign_err)
+{
     // Processar linhas
+    size_t linha_atual = 1;
     string sql_ins;
+    string linha_cont;
+
+    string linha;
+    string dado;
+    vector<string> linhas_bd;
+
+    vector<pair<size_t, string>> erros_proc;
+
     while (getline(arq_ent, linha))
     {
+      if (!linha_cont.empty())
+      {
+        linha = linha_cont + linha;
+        linha_cont.clear();
+      }
+
+      if (rng::count(linha, '"') % 2)
+      {
+        linha_cont = linha + "\\r\\n";
+        continue;
+      }
+
       ispanstream is(linha);
       sql_ins += "(";
 
@@ -239,14 +277,31 @@ void bd_criar_estrutura(sqlite_api& con, ifstream& arq_ent, char delim_ent)
       sql_ins.clear();
 
       if (linhas_bd.size() > 100)
-      {
-        bd_gravar_dados_tabela(con, "tab_1", linhas_bd);
+      try {
+        bd_gravar_dados_tabela(con, "tab_0", linhas_bd);
         linhas_bd.clear();
+      } catch (const exception& e) {
+        erros_proc.push_back({ linha_atual, e.what() });
+        linhas_bd.clear();
+        if (!ign_err)
+          break;
       }
+
+      linha_atual++;
     }
 
-    if (!linhas_bd.empty())
-      bd_gravar_dados_tabela(con, "tab_1", linhas_bd);
+    if (!linhas_bd.empty()) try {
+      bd_gravar_dados_tabela(con, "tab_0", linhas_bd);
+    } catch (const exception& e) {
+      erros_proc.push_back({ linha_atual, e.what() });
+    }
+
+    if (!erros_proc.empty())
+    {
+      if (!ign_err)
+        throw runtime_exc { "linha {}\n{}", erros_proc[0].first, erros_proc[0].second };
+      println("{} erros ao processar linhas.", erros_proc.size());
+    }
 }
 
 void bd_gravar_dados_tabela(sqlite_api& con, string_view tabela, const vector<string>& dados)
@@ -256,14 +311,18 @@ void bd_gravar_dados_tabela(sqlite_api& con, string_view tabela, const vector<st
     for (auto ch : dados | vw::join_with(string { ", " }))
         sql += ch;
 
-    con.exec_sql(sql);
+    try {
+      con.exec_sql(sql);
+    } catch (const exception& e) {
+      throw runtime_exc { "Erro ao inserir: '{}'\nErro retornado pelo BD: '{}'", sql, e.what() };
+    }
 }
 
 void gerar_saida(sqlite_api& con, ostream& arq_saida, char delim_saida, bool delim_fim_linha, bool must_quoted, string_view sql_out)
 {
     // Gerar a saída
     // Primeiro busca o nome das colunas para fazer o mapeamento de-para com as colunas de resultado
-    auto rs = con.exec_sql("SELECT cc.name FROM csv_col cc WHERE cc.tab = 'tab_1' ORDER BY cc.ord").value();
+    auto rs = con.exec_sql("SELECT cc.name FROM csv_col cc WHERE cc.tab = 'tab_0' ORDER BY cc.ord").value();
 
     // De-para nome colunas
     map<string, string> de_para_cols;
