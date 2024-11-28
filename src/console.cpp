@@ -23,7 +23,8 @@ void uso_exe(string_view msg /*= {}*/)
             "  -o arquivo_saida: Arquivo para gravar o resultado do processamento.\n"
             "  -q                Indica que deve colocar os itens com aspas. Por padrão segue o arquivo de entrada.\n"
             "  -no-q             Indica que não deve colocar os itens com aspas. Por padrão segue o arquivo de entrada.\n"
-            "  -ig               Ignorar erros básicos de leiaute, linhas com problema.\n"
+            "  -ig               Ignorar erros básicos de leiaute, mostra linhas com problema.\n"
+            "  -sem-cabecalho    Considera a primeira linha como dados e não cabeçalho.\n"
             "\n"
             "{}", msg);
     exit(1);
@@ -39,8 +40,8 @@ map<string, string> interpretar_args(span<const char*> args)
       "Onde:\n"
       "  SELECT:       Literal caso insensitivo.\n"
       "  [colunas]:    Podem representar\n"
-      "                - col(i)      : imprime os valores da coluna i (baseado em 0).\n"
-      "  [tabela-csv]: O pseudo-nome do CSV carregado (sempre tab_1).\n"
+      "                - col_i       : imprime os valores da coluna i (baseado em 0).\n"
+      "  [tabela-csv]: O pseudo-nome do CSV carregado (sempre tab_0).\n"
       "  [condicao]:   Condição boleana para filtro.\n";
 
     if (args.size() < 2)
@@ -93,6 +94,8 @@ map<string, string> interpretar_args(span<const char*> args)
         ret["-no-q"] = "sim";
       else if (arg == "-ig")
         ret["-ig"] = "sim";
+      else if (arg == "-sem-cabecalho")
+        ret["-sem-cabecalho"] = "sim";
       else
         uso_exe("Parâmetro '" + arg + "' não reconhecido ou necessita de parâmetro.");
     }

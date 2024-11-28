@@ -55,6 +55,8 @@ Cascavel CSV [arquivo_csv] [-c 'comando'] [-o arquivo_saida]
   -o arquivo_saida: Arquivo para gravar o resultado do processamento.
   -q                Indica que deve colocar os itens com aspas. Por padrão segue o arquivo de entrada.
   -no-q             Indica que não deve colocar os itens com aspas. Por padrão segue o arquivo de entrada.
+  -ig               Ignorar erros básicos de leiaute, mostra linhas com problema.
+  -sem-cabecalho    Considera a primeira linha como dados e não cabeçalho.
 ```
 
 ### SQL
