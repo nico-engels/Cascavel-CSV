@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <generator>
 #include <optional>
 #include <print>
 #include <ranges>
@@ -12,13 +13,12 @@
 #include <string_view>
 #include <sstream>
 #include <tuple>
+#include <utility>
 #include <vector>
 #include "console.h"
 #include "runtime_exc.h"
 #include "sqlite_api.h"
 #include "str_util.h"
-
-#include <iostream>
 
 using namespace std;
 using namespace std::chrono;
@@ -39,9 +39,14 @@ struct cmd_cfg_t
     bool sem_cabecalho;
 };
 
+extern generator<vector<string>>* aaa;
+
+using gen_it_type = decltype(aaa->begin())&;
+
 cmd_cfg_t extrair_cfg(const map<string, string>&, ifstream&);
-int bd_criar_estrutura(sqlite_api&, ifstream&, char, bool);
-void bd_processa_dados(sqlite_api&, ifstream&, char, bool, int);
+generator<vector<string>> gerador_linhas_csv(ifstream&, char);
+int bd_criar_estrutura(sqlite_api&, gen_it_type, bool);
+void bd_processa_dados(sqlite_api&, gen_it_type, bool, int);
 void bd_gravar_dados_tabela(sqlite_api&, string_view, const vector<string>&);
 void gerar_saida(sqlite_api&, ostream&, char, bool, bool, string_view, bool);
 
@@ -83,20 +88,29 @@ try {
     //con.conectar("..\\examples\\test.bd");
     con.conectar("");
 
+    // Usando coroutines
     // Processamento
-    // 1º - Estrutura
-    auto num_cols = bd_criar_estrutura(con, arq_ent, delim_ent, sem_cabecalho);
+    // 1º - Criar gerador das linhas
+    auto gn = gerador_linhas_csv(arq_ent, delim_ent);
+    auto gn_it = gn.begin();
 
-    // 2º - Verifica se a consulta funciona
+    // 2º - Estrutura
+    auto num_cols = bd_criar_estrutura(con, gn_it, sem_cabecalho);
+
+    // Se não tem cabeçalho devolve a linha consumida
+    if (sem_cabecalho)
+      arq_ent.seekg(0);
+    gn_it++;
+
+    // 3º - Verifica se a consulta funciona
     (void)con.exec_sql(sql_out.value_or("SELECT * FROM tab_0 t1")).value();
 
-    // 3º - Dados
-    bd_processa_dados(con, arq_ent, delim_ent, ign_err, num_cols);
+    // 4º - Dados
+    bd_processa_dados(con, gn_it, ign_err, num_cols);
 
-    // 4º - Gerar Saída
+    // 5º - Gerar Saída
     gerar_saida(con, *arq_saida, delim_saida, delim_fim_linha, must_quoted,
       sql_out.value_or("SELECT * FROM tab_0 t1"), sem_cabecalho);
-
 
 } catch (const exception& e) {
     println("{}", e.what());
@@ -205,65 +219,11 @@ cmd_cfg_t extrair_cfg(const map<string, string>& args, ifstream& arq_ent)
     return { *delim_ent, *delim_saida, *delim_fim_linha, *must_quoted, sql, ign, sem_cabecalho };
 }
 
-int bd_criar_estrutura(sqlite_api& con, ifstream& arq_ent, char delim_ent, bool sem_cabecalho)
+generator<vector<string>> gerador_linhas_csv(ifstream& arq_ent, char delim_ent)
 {
-    // Tabela auxiliar
-    con.exec_sql("CREATE TABLE csv_col (TAB VARCHAR(10), ORD INTEGER, NAME VARCHAR(255))");
-
-    // Processar
     string linha;
-    string dado;
-    vector<string> linhas_bd;
-
-    // Processar cabeçalho
-    // Primeiro definir as colunas
-    vector<string> cols;
-    if (getline(arq_ent, linha))
-    {
-      ispanstream is(linha);
-      while (getline(is, dado, delim_ent)) {
-        if (sem_cabecalho)
-          cols.push_back("a" + to_string(cols.size()));
-        else
-          cols.push_back(string { trim(trim(dado), '"') });
-      }
-    }
-    else
-      throw runtime_exc { "Não foi possível ler o cabeçalho!" };
-
-    // Se for sem cabeçalho rebobina a stream
-    if (sem_cabecalho)
-      arq_ent.seekg(0);
-
-    // Cria a tabela e metadados das colunas
-    string sql_tab = "CREATE TABLE tab_0 (";
-    for (const auto [i, c] : cols | vw::enumerate) {
-      linhas_bd.push_back(format("('tab_0', {}, '{}')", i, c));
-
-      if (i > 0)
-        sql_tab += ", ";
-      sql_tab += format("col_{} VARCHAR(255)", i);
-    }
-    sql_tab += ")";
-
-    bd_gravar_dados_tabela(con, "csv_col (TAB, ORD, NAME)", linhas_bd);
-
-    con.exec_sql(sql_tab);
-
-    return cols.size();
-}
-
-void bd_processa_dados(sqlite_api& con, ifstream& arq_ent, char delim_ent, bool ign_err, int num_cols)
-{
-    // Processar linhas
-    size_t linha_atual = 1;
     string linha_cont;
-
-    string linha;
     string dado;
-
-    vector<tuple<size_t, string, string>> erros_proc;
-    vector<vector<string>> csv;
 
     while (getline(arq_ent, linha))
     {
@@ -285,93 +245,116 @@ void bd_processa_dados(sqlite_api& con, ifstream& arq_ent, char delim_ent, bool 
       while (getline(is, dado, delim_ent))
         valores.push_back(format("'{}'", replace_all(trim(trim(dado), '"'), "'", "''")));
 
-      csv.push_back(move(valores));
-
-      // Insere em lote
-      if (csv.size() > 100)
-      try {
-        // Criação de colunas se necessário
-        vector<string> novas_cols;
-        for (const auto& csv_linha : csv) {
-          for (; num_cols < static_cast<int>(csv_linha.size()); num_cols++) {
-            novas_cols.push_back(format("('tab_0', {0}, 'a{0}')", num_cols));
-            con.exec_sql(format("ALTER TABLE tab_0 ADD col_{} VARCHAR(255)", num_cols));
-          }
-        }
-        if (!novas_cols.empty())
-          bd_gravar_dados_tabela(con, "csv_col (TAB, ORD, NAME)", novas_cols);
-
-        // Gera os valores do insert
-        vector<string> csv_linhas_ins_sql;
-        for (const auto& csv_linha : csv) {
-          string ins_sql = "(";
-          string sep = "";
-          for (int i = 0; i < num_cols; i++, sep = ",") {
-            if (i < static_cast<int>(csv_linha.size()))
-              ins_sql += sep + csv_linha[i];
-            else
-              ins_sql += sep + "null";
-          }
-          ins_sql += ")";
-          csv_linhas_ins_sql.push_back(ins_sql);
-        }
-
-        bd_gravar_dados_tabela(con, "tab_0", csv_linhas_ins_sql);
-        csv.clear();
-
-      } catch (const exception& e) {
-        erros_proc.push_back({ linha_atual, linha, e.what() });
-
-        if (!ign_err)
-          break;
-        csv.clear();
-      }
-
-      linha_atual++;
+      co_yield valores;
     }
 
-    // Insere se ainda tem algum comando
-    if (!csv.empty())
-    try {
-      // Criação de colunas se necessário
-      vector<string> novas_cols;
-      for (const auto& csv_linha : csv) {
-        for (; num_cols < static_cast<int>(csv_linha.size()); num_cols++) {
+    co_return;
+}
+
+int bd_criar_estrutura(sqlite_api& con, gen_it_type gni, bool sem_cabecalho)
+{
+    // Tabela auxiliar
+    con.exec_sql("CREATE TABLE csv_col (TAB VARCHAR(10), ORD INTEGER, NAME VARCHAR(255))");
+
+    // Processar
+    string linha;
+    string dado;
+    vector<string> linhas_bd;
+
+    // Processar cabeçalho
+    auto cols = *gni;
+
+    // Se for sem cabeçalho renomeia as colunas
+    if (sem_cabecalho)
+      for (size_t i = 0; i < cols.size(); i++)
+        cols[i] = format("'a{}'", i);
+
+    // Cria a tabela e metadados das colunas
+    string sql_tab = "CREATE TABLE tab_0 (";
+    for (const auto [i, c] : cols | vw::enumerate) {
+      linhas_bd.push_back(format("('tab_0', {}, {})", i, c));
+
+      if (i > 0)
+        sql_tab += ", ";
+      sql_tab += format("col_{} VARCHAR(255)", i);
+    }
+    sql_tab += ")";
+
+    bd_gravar_dados_tabela(con, "csv_col (TAB, ORD, NAME)", linhas_bd);
+
+    con.exec_sql(sql_tab);
+
+    return cols.size();
+}
+
+void bd_processa_dados(sqlite_api& con, gen_it_type gni, bool ign_err, int num_cols)
+{
+    // Processar linhas
+    size_t linha_atual = 1;
+    vector<tuple<size_t, string>> erros_proc;
+
+    for (auto grupo_linhas : rng::subrange { move(gni), default_sentinel } | vw::chunk(100)) {
+
+      vector<string> csv_ins_sql;
+      int max_cols = num_cols;
+
+      for (auto linha : grupo_linhas) {
+
+        // Se aumentou as colunas reajusta os sqls
+        if (cmp_less(max_cols, linha.size()))
+        {
+          string null_apend;
+          for (int i = max_cols; cmp_less(i, linha.size()); i++)
+            null_apend += ", null";
+
+          for (auto& ins_sql : csv_ins_sql)
+            ins_sql += null_apend;
+
+          max_cols = linha.size();
+        }
+
+        // Criação de colunas se necessário
+        for (int i = linha.size(); i < max_cols; i++)
+          linha.push_back("null");
+
+        string linha_sql = "(" + (linha | vw::join_with(string { ", " }) | rng::to<string>());
+        csv_ins_sql.push_back(linha_sql);
+        linha_atual++;
+      }
+
+      // Gravação
+      // Novas colunas
+      {
+        vector<string> novas_cols;
+        for (; num_cols < max_cols; num_cols++) {
           novas_cols.push_back(format("('tab_0', {0}, 'a{0}')", num_cols));
           con.exec_sql(format("ALTER TABLE tab_0 ADD col_{} VARCHAR(255)", num_cols));
         }
-      }
-      if (!novas_cols.empty())
-        bd_gravar_dados_tabela(con, "csv_col (TAB, ORD, NAME)", novas_cols);
-
-      // Gera os valores do insert
-      vector<string> csv_linhas_ins_sql;
-      for (const auto& csv_linha : csv) {
-        string ins_sql = "(";
-        string sep = "";
-        for (int i = 0; i < num_cols; i++, sep = ",") {
-          if (i < static_cast<int>(csv_linha.size()))
-            ins_sql += sep + csv_linha[i];
-          else
-            ins_sql += sep + "null";
-        }
-        ins_sql += ")";
-        csv_linhas_ins_sql.push_back(ins_sql);
+        if (!novas_cols.empty())
+          bd_gravar_dados_tabela(con, "csv_col (TAB, ORD, NAME)", novas_cols);
       }
 
-      bd_gravar_dados_tabela(con, "tab_0", csv_linhas_ins_sql);
+      // Dados
+      try {
+        for (auto& ins_sql : csv_ins_sql)
+          ins_sql += ")";
 
-    } catch (const exception& e) {
-      erros_proc.push_back({ linha_atual - 1, linha, e.what() });
+        bd_gravar_dados_tabela(con, "tab_0", csv_ins_sql);
+
+      } catch (const exception& e) {
+        erros_proc.push_back({ linha_atual, e.what() });
+
+        if (!ign_err)
+          break;
+      }
     }
 
     if (!erros_proc.empty())
     {
       if (!ign_err)
-        throw runtime_exc { "linha {}\n{}\nErro\n{}", get<0>(erros_proc.back()),
-          get<1>(erros_proc.back()), get<2>(erros_proc.back()) };
+        throw runtime_exc { "linha {}\nErro\n{}", get<0>(erros_proc.back()),  get<1>(erros_proc.back()) };
       println("{} erros ao processar linhas.", erros_proc.size());
-      for (const auto& [linha, erro, _] : erros_proc)
+      for (const auto& [linha, erro] : erros_proc)
         println("{} => {}", linha, erro);
     }
 }
@@ -380,18 +363,13 @@ void bd_gravar_dados_tabela(sqlite_api& con, string_view tabela, const vector<st
 {
     string sql = "INSERT INTO " + string { tabela } + " VALUES ";
 
-    for (auto ch : valores_linhas | vw::join_with(string { ", " }))
-        sql += ch;
+    sql += valores_linhas | vw::join_with(string { ", " }) | rng::to<string>();
 
     try {
       con.exec_sql(sql);
-    } catch (const exception& e) {
-
-      for (const auto& valores : valores_linhas) try {
+    } catch (const exception&) {
+      for (const auto& valores : valores_linhas)
         con.exec_sql(format("INSERT INTO {} VALUES {}", tabela, valores));
-      } catch (const exception& e) {
-        println("err sql: ´{}´\n{}\n", valores, e.what());
-      }
       throw;
     }
 }
@@ -417,10 +395,12 @@ void gerar_saida(sqlite_api& con, ostream& arq_saida, char delim_saida, bool del
       // Cabeçalho
       for (bool primeiro = true; const auto& c : rs.cols()) {
         string col;
-        if (de_para_cols.contains(c.name()))
+        if (de_para_cols.contains(c.name())) {
           col = de_para_cols[c.name()];
-        else
+        }
+        else {
           col = c.name();
+        }
 
         if (!primeiro)
           print(arq_saida, "{}", delim_saida);
@@ -439,16 +419,16 @@ void gerar_saida(sqlite_api& con, ostream& arq_saida, char delim_saida, bool del
 
     // Linhas
     for (const auto& r : rs.rows()) {
-      for (auto ch : r | vw::take_while([](const auto& rol_data) { return !rol_data.is_nullopt(); })
-                       | vw::transform([&](const auto& rol_data)
-                         {
-                           if (must_quoted)
-                             return string { "\"" } + rol_data.to_str() + "\"";
-                           else
-                             return rol_data.to_str();
-                         })
-                       | vw::join_with(delim_saida))
-        print(arq_saida, "{}", ch);
+      print(arq_saida, "{}", r | vw::take_while([](const auto& rol_data) { return !rol_data.is_nullopt(); })
+                               | vw::transform([&](const auto& rol_data)
+                                 {
+                                   if (must_quoted)
+                                     return string { "\"" } + rol_data.to_str() + "\"";
+                                   else
+                                     return rol_data.to_str();
+                                 })
+                                | vw::join_with(delim_saida)
+                                | rng::to<string>());
 
       if (delim_fim_linha)
         print(arq_saida, "{}", delim_saida);
