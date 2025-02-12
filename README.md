@@ -88,7 +88,7 @@ arquivo estoque.csv
 Por padrão o Cascavel-CSV imprime o resultado na tela. Então lendo o arquivo e não
 realizando nenhuma operação ele apenas lê o arquivo:
 
-cascavel_csv estoque.csv
+`cascavel_csv estoque.csv`
 
 Saída terminal:
 
@@ -104,20 +104,20 @@ Saída terminal:
 
 ### Delimitador de saída
 
-É possível trocar os delimitadores de saída:
+É possível trocar os delimitadores de saída (Usando o unix column para formatar em tabela):
 
-`cascavel_csv estoque.csv -ds tab`
+`cascavel_csv estoque.csv -ds tab | column -t -s $'\t'`
 
 Saída terminal:
 
 ```
-"categoria"	"item"	"quantidade"	"preço"
-"café da manhã"	"leite"	"200"	"6.55"
-"frutas"	"banana"	"100"	"2.15"
-"café da manhã"	"pão"	"5"	"7.00"
-"frutas"	"maça"	"150"	"1.67"
-"café da manhã"	"queijo"	"15"	"8.00"
-"legumes"	"cenoura"	"30"	"1.44"
+"categoria"      "item"     "quantidade"  "preço"
+"café da manhã"  "leite"    "200"         "6.55"
+"frutas"         "banana"   "100"         "2.15"
+"café da manhã"  "pão"      "5"           "7.00"
+"frutas"         "maça"     "150"         "1.67"
+"café da manhã"  "queijo"   "15"          "8.00"
+"legumes"        "cenoura"  "30"          "1.44"
 ```
 
 ### Consulta
