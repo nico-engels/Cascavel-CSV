@@ -168,3 +168,16 @@ Saída:
 "Valor Estoque"
 "1973.70"
 ```
+
+Condições
+
+`cascavel_csv estoque.csv -ds tab -c 'select t.*, printf("%.2f", col_2 * col_3) as total from tab_0 t where cast(col_2 as number) >= 100' | column -t -s $'\t'`
+
+Saída:
+
+```
+"categoria"      "item"    "quantidade"  "preço"  "total"
+"café da manhã"  "leite"   "200"         "6.55"   "1310.00"
+"frutas"         "banana"  "100"         "2.15"   "215.00"
+"frutas"         "maça"    "150"         "1.67"   "250.50"
+```

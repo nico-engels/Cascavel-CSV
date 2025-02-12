@@ -1,0 +1,4 @@
+{
+    "C_Cpp.default.compilerPath": "/usr/local/bin/g++-latest",
+    "C_Cpp.default.cppStandard": "c++23"
+}
